@@ -142,9 +142,9 @@ public:
   MDSPAN_INLINE_FUNCTION_DEFAULTED
   constexpr basic_mdarray(basic_mdarray const&) noexcept(std::is_nothrow_copy_constructible<container_type>::value) = default;
   MDSPAN_INLINE_FUNCTION_DEFAULTED
-  constexpr basic_mdarray(basic_mdarray&&) noexcept = default;
+  constexpr basic_mdarray(basic_mdarray&&) noexcept(std::is_nothrow_move_constructible<container_type>::value) = default;
   MDSPAN_INLINE_FUNCTION_DEFAULTED
-  _MDSPAN_CONSTEXPR_14_DEFAULTED basic_mdarray& operator=(basic_mdarray&&) noexcept = default;
+  _MDSPAN_CONSTEXPR_14_DEFAULTED basic_mdarray& operator=(basic_mdarray&&) noexcept(std::is_nothrow_move_assignable<container_type>::value) = default;
   MDSPAN_INLINE_FUNCTION_DEFAULTED
   _MDSPAN_CONSTEXPR_14_DEFAULTED basic_mdarray& operator=(basic_mdarray const&) noexcept(std::is_nothrow_copy_assignable<container_type>::value) = default;
 
