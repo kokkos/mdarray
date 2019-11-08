@@ -142,6 +142,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/MDArrayConfig.cmake ${CMAKE_CURRENT_BI
 ################################################################################
 
 if(MDARRAY_ENABLE_TESTS)
+  enable_testing()
   add_subdirectory(tests)
   add_subdirectory(compilation_tests)
 endif()
