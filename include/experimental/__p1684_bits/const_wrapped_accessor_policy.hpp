@@ -72,31 +72,31 @@ struct __const_wrapped_accessor_policy {
   constexpr __const_wrapped_accessor_policy() noexcept(noexcept(CP())) = default;
   MDSPAN_INLINE_FUNCTION_DEFAULTED
   constexpr __const_wrapped_accessor_policy(__const_wrapped_accessor_policy const&)
-  noexcept(is_nothrow_copy_constructible_v<CP>) = default;
+  noexcept(is_nothrow_copy_constructible<CP>::value) = default;
   MDSPAN_INLINE_FUNCTION_DEFAULTED
   constexpr __const_wrapped_accessor_policy(__const_wrapped_accessor_policy&&)
-  noexcept(is_nothrow_move_constructible_v<CP>) = default;
+  noexcept(is_nothrow_move_constructible<CP>::value) = default;
   MDSPAN_INLINE_FUNCTION_DEFAULTED
   _MDSPAN_CONSTEXPR_14_DEFAULTED __const_wrapped_accessor_policy&
   operator=(__const_wrapped_accessor_policy const&)
-  noexcept(is_nothrow_copy_assignable_v<CP>) = default;
+  noexcept(is_nothrow_copy_assignable<CP>::value) = default;
   _MDSPAN_CONSTEXPR_14_DEFAULTED __const_wrapped_accessor_policy&
   operator=(__const_wrapped_accessor_policy&&)
-  noexcept(is_nothrow_move_assignable_v<CP>) = default;
+  noexcept(is_nothrow_move_assignable<CP>::value) = default;
   MDSPAN_INLINE_FUNCTION_DEFAULTED
   ~__const_wrapped_accessor_policy() noexcept = default;
 
   MDSPAN_INLINE_FUNCTION
   explicit constexpr
   __const_wrapped_accessor_policy(CP&& underlying)
-  noexcept(is_nothrow_move_constructible_v<CP>)
+  noexcept(is_nothrow_move_constructible<CP>::value)
     : __underlying_cp(std::move(underlying))
   { }
 
   MDSPAN_INLINE_FUNCTION
   explicit constexpr
   __const_wrapped_accessor_policy(CP const& underlying)
-  noexcept(is_nothrow_copy_constructible_v<CP>)
+  noexcept(is_nothrow_copy_constructible<CP>::value)
     : __underlying_cp(underlying)
   { }
 
