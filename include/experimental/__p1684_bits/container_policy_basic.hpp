@@ -99,11 +99,11 @@ public:
 
   MDSPAN_INLINE_FUNCTION
   static constexpr pointer offset(pointer p, ptrdiff_t i) noexcept {
-    return p[size_t(i)];
+    return &p[size_t(i)];
   }
   MDSPAN_INLINE_FUNCTION
   static constexpr const_pointer offset(const_pointer p, ptrdiff_t i) noexcept {
-    return p[size_t(i)];
+    return &p[size_t(i)];
   }
 
   // TODO converting constructors (and make sure they work for conversion to const offset policy
