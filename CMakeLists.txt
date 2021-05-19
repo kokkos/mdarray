@@ -90,9 +90,9 @@ endif()
 
 ################################################################################
 
-find_package(MDSpan REQUIRED)
-if(MDSpan_FOUND)
-  message(STATUS "Found MDSpan in ${MDSpan_DIR}")
+find_package(mdspan REQUIRED)
+if(mdspan_FOUND)
+  message(STATUS "Found mdspan in ${mdspan_DIR}")
 endif()
 
 ################################################################################
