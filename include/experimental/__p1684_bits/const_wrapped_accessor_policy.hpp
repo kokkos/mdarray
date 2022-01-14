@@ -101,14 +101,14 @@ struct __const_wrapped_accessor_policy {
   { }
 
   MDSPAN_INLINE_FUNCTION
-  constexpr reference access(pointer ptr, ptrdiff_t i) const
+  constexpr reference access(pointer ptr, size_t i) const
   noexcept(noexcept(__underlying_cp.access(ptr, i)))
   {
     return __underlying_cp.access(ptr, i);
   }
 
   MDSPAN_INLINE_FUNCTION
-  constexpr pointer offset(pointer p, ptrdiff_t i) const
+  constexpr pointer offset(pointer p, size_t i) const
   noexcept(noexcept(__underlying_cp.offset(p, i)))
   {
     return __underlying_cp.offset(p, i);

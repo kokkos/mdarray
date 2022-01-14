@@ -77,32 +77,32 @@ public:
   using const_reference = typename container_type::const_reference;
 
   MDSPAN_FORCE_INLINE_FUNCTION
-  static constexpr reference access(container_type& c, ptrdiff_t i)
+  static constexpr reference access(container_type& c, size_t i)
     noexcept(noexcept(c[i]))
   {
     return c[size_t(i)];
   }
   MDSPAN_FORCE_INLINE_FUNCTION
-  static constexpr const_reference access(container_type const& c, ptrdiff_t i)
+  static constexpr const_reference access(container_type const& c, size_t i)
     noexcept(noexcept(c[i]))
   {
     return c[size_t(i)];
   }
   MDSPAN_FORCE_INLINE_FUNCTION
-  static constexpr reference access(pointer c, ptrdiff_t i) noexcept {
+  static constexpr reference access(pointer c, size_t i) noexcept {
     return c[size_t(i)];
   }
   MDSPAN_FORCE_INLINE_FUNCTION
-  static constexpr const_reference access(const_pointer c, ptrdiff_t i) noexcept {
+  static constexpr const_reference access(const_pointer c, size_t i) noexcept {
     return c[size_t(i)];
   }
 
   MDSPAN_INLINE_FUNCTION
-  static constexpr pointer offset(pointer p, ptrdiff_t i) noexcept {
+  static constexpr pointer offset(pointer p, size_t i) noexcept {
     return &p[size_t(i)];
   }
   MDSPAN_INLINE_FUNCTION
-  static constexpr const_pointer offset(const_pointer p, ptrdiff_t i) noexcept {
+  static constexpr const_pointer offset(const_pointer p, size_t i) noexcept {
     return &p[size_t(i)];
   }
 
@@ -197,7 +197,7 @@ namespace __detail {
 //==============================================================================
 // <editor-fold desc="container policy select implementation"> {{{1
 
-template <ptrdiff_t> using __void_ptrdiff_t = void;
+template <size_t> using __void_size_t = void;
 
 // TODO make an alternative to this that works with MSVC?
 template <class Map, class=void>
@@ -207,13 +207,13 @@ struct __has_constexpr_required_span_size
 
 template <class Map>
 struct __has_constexpr_required_span_size<
-  Map, __void_ptrdiff_t<(Map{}.required_span_size(), 0)>
+  Map, __void_size_t<(Map{}.required_span_size(), 0)>
 > : std::true_type
 { static constexpr auto size = Map{}.required_span_size(); };
 
 template <class, class, class> struct __container_policy_select;
 
-template <class T, class LP, ptrdiff_t... Extents>
+template <class T, class LP, size_t... Extents>
 struct __container_policy_select<
   T, LP, std::experimental::extents<Extents...>
 >

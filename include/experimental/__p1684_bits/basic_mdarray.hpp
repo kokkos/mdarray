@@ -50,7 +50,7 @@
 #include <experimental/__p0009_bits/macros.hpp>
 #include <experimental/__p0009_bits/layout_right.hpp>
 #include <experimental/__p0009_bits/extents.hpp>
-#include <experimental/__p0009_bits/basic_mdspan.hpp>
+#include <experimental/__p0009_bits/mdspan.hpp>
 
 namespace std {
 namespace experimental {
@@ -71,7 +71,7 @@ struct _basic_mdarray_crtp_helper<
  protected:
   MDSPAN_FORCE_INLINE_FUNCTION Derived& __self() noexcept { return *static_cast<Derived*>(this); }
   MDSPAN_FORCE_INLINE_FUNCTION Derived const& __self() const noexcept { return *static_cast<Derived const*>(this); }
-  MDSPAN_FORCE_INLINE_FUNCTION constexpr ptrdiff_t __size() const noexcept {
+  MDSPAN_FORCE_INLINE_FUNCTION constexpr size_t __size() const noexcept {
     return _MDSPAN_FOLD_TIMES_RIGHT((__self().map_.extents().template __extent<ExtIdxs>()), /* * ... * */ 1);
   }
   template <class ReferenceType, class IndexType, size_t N>
@@ -97,7 +97,7 @@ class basic_mdarray;
 
 template <
   class ElementType,
-  ptrdiff_t... Exts,
+  size_t... Exts,
   class LayoutPolicy,
   class ContainerPolicy
 >
@@ -122,8 +122,8 @@ public:
   using layout_type = LayoutPolicy;
   using mapping_type = typename layout_type::template mapping<extents_type>; // TODO @proposal-bug typo in synopsis
   using value_type = remove_cv_t<element_type>;
-  using index_type = ptrdiff_t;
-  using difference_type = ptrdiff_t;
+  using index_type = size_t;
+  using difference_type = size_t;
   using container_policy_type = ContainerPolicy;
   using container_type = typename container_policy_type::container_type;
   using pointer = typename container_policy_type::pointer; // TODO @proposal-bug this is misspelled in the synopsis
@@ -131,9 +131,9 @@ public:
   using reference = typename container_policy_type::reference;
   using const_reference = typename container_policy_type::const_reference;
   using view_type =
-    basic_mdspan<element_type, extents_type, layout_type, container_policy_type>;
+    mdspan<element_type, extents_type, layout_type, container_policy_type>;
   using const_view_type =
-    basic_mdspan<const element_type, extents_type, layout_type,
+    mdspan<const element_type, extents_type, layout_type,
       __detail::__const_wrapped_accessor_policy<container_policy_type>
     >;
 
@@ -408,7 +408,7 @@ private:
 
 };
 
-template <class T, ptrdiff_t... Exts>
+template <class T, size_t... Exts>
 using mdarray = basic_mdarray<T, std::experimental::extents<Exts...>>;
 
 } // end namespace __mdarray_version_0
