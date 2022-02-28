@@ -84,6 +84,38 @@ struct _basic_mdarray_crtp_helper<
   }
 };
 
+template <class ContainerPolicy, class = void>
+struct __has_allocator{
+  static constexpr bool value = false;
+};
+
+template <class ContainerPolicy>
+using __policy_allocator_t = typename ContainerPolicy::container_type::allocator_type;
+
+// TODO: Make this C++11/14 friendly
+template <class ContainerPolicy>
+struct __has_allocator<ContainerPolicy, void_t<__policy_allocator_t<ContainerPolicy>>>{
+  using type = __policy_allocator_t<ContainerPolicy>;
+  static constexpr bool value = true;
+};
+
+template<class ContainerPolicy>
+constexpr bool __has_allocator_v = __has_allocator<ContainerPolicy>::value;
+
+template<class Container,
+         class Alloc,
+         class... Args>
+auto __uses_allocator_helper(const Alloc& alloc, Args&&... args)->decltype(Container{allocator_arg, alloc, std::forward<Args>(args)...}){
+  return Container{allocator_arg, alloc, std::forward<Args>(args)...};
+}
+
+template<class Container,
+         class Alloc,
+         class... Args>
+auto __uses_allocator_helper(const Alloc& alloc, Args&&... args)->decltype(Container{std::forward<Args>(args)..., alloc}){
+  return Container{std::forward<Args>(args)..., alloc};
+}
+
 
 } // end namespace __detail
 
@@ -234,6 +266,31 @@ public:
       map_(std::move(other.map_)),
       c_(std::move(other.c_))
   { }
+
+  //==========================================================================
+  // Allocator Aware Constructors
+
+  //Pretty sure I need to invoke raw SFINAE here
+  
+  template<
+    class = enable_if_t<__detail::__has_allocator<container_policy_type>::value, bool>,
+    class Alloc = __detail::__policy_allocator_t<container_policy_type>
+  >
+  constexpr explicit basic_mdarray(const Alloc& alloc) noexcept 
+  : cp_(),
+    map_(),
+    c_(cp_.create(map_.required_span_size(), alloc))
+  { } 
+  /*
+    MDSPAN_INLINE_FUNCTION_DEFAULTED
+  constexpr basic_mdarray() noexcept(std::is_nothrow_default_constructible<container_type>::value) = default;
+  MDSPAN_INLINE_FUNCTION_DEFAULTED
+  constexpr basic_mdarray(basic_mdarray const&) noexcept(std::is_nothrow_copy_constructible<container_type>::value) = default;
+  MDSPAN_INLINE_FUNCTION_DEFAULTED
+  constexpr basic_mdarray(basic_mdarray&&) noexcept(std::is_nothrow_move_constructible<container_type>::value) = default;
+  */
+
+  //==========================================================================
 
   // TODO noexcept specification
   MDSPAN_TEMPLATE_REQUIRES(
