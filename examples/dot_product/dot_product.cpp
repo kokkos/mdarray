@@ -61,6 +61,7 @@ int main() {
     auto a = array_2d_dynamic(rows, cols);
     auto b = array_2d_dynamic_left(rows, cols);
     auto c = array_2d_dynamic(std::allocator<int>{});
+    //auto d = array_2d_dynamic( 3, 4, std::allocator<int>());
 
     fill_in_order(a);
     fill_in_order(b);
