@@ -122,10 +122,17 @@ struct __nondeduced{
   using type = Type;
 };
 
-template<class Independent, class Type>
+
+template<class Type>
+using __nondeduced_t = typename __nondeduced<Type>::type;
+
+template<class Independent, class... Types>
 struct __make_dependent{
   using type = Independent;
 };
+
+template<class Independent, class... Types>
+using __make_dependent_t = typename __make_dependent<Independent, Types...>::type;
 
 } // end namespace __detail
 
@@ -297,7 +304,7 @@ public:
   struct nothrow_alloc_copy{
     static constexpr bool value =  is_nothrow_copy_constructible<container_policy_type>::value 
                                 && is_nothrow_copy_constructible<mapping_type>::value
-                                && noexcept(__detail::__uses_allocator_helper(declval<const container_type&>(), declval<const Alloc&>()));
+                                && noexcept(__detail::__uses_allocator_helper<container_type, Alloc>(declval<const Alloc&>(), declval<const container_type&>()));
   };
   public:
 
@@ -308,7 +315,7 @@ public:
   constexpr explicit basic_mdarray(const basic_mdarray& other, const typename __detail::__nondeduced<Alloc>::type& alloc) noexcept(nothrow_alloc_copy<Alloc>::value)
   : cp_(),
     map_(),
-    c_(__detail::__uses_allocator_helper(other.c_, alloc))
+    c_(__detail::__uses_allocator_helper<container_type, Alloc>(alloc, other.c_))
   { } 
 
   private:
@@ -316,28 +323,27 @@ public:
   struct nothrow_alloc_move{
     static constexpr bool value =  is_nothrow_move_constructible<container_policy_type>::value 
                                 && is_nothrow_move_constructible<mapping_type>::value
-                                && noexcept(__detail::__uses_allocator_helper(declval<container_type>(), declval<const Alloc&>()));
+                                && noexcept(__detail::__uses_allocator_helper<container_type, Alloc>(declval<const Alloc&>(), declval<container_type>()));
   };
 
   public:
 
   template<
     class Dummy = void,
-    class Alloc = __detail::__policy_allocator_t<typename __detail::__make_dependent<container_policy_type, Dummy>::type>
+    class Alloc = __detail::__policy_allocator_t<__detail::__make_dependent_t<container_policy_type, Dummy>>
   >
-  constexpr explicit basic_mdarray(basic_mdarray&& other, const typename __detail::__nondeduced<Alloc>::type& alloc) noexcept(nothrow_alloc_move<Alloc>::value)
+  constexpr explicit basic_mdarray(basic_mdarray&& other, const __detail::__nondeduced_t<Alloc>& alloc) noexcept(nothrow_alloc_move<Alloc>::value)
   : cp_(std::move(other.cp_)),
     map_(std::move(other.map_)),
-    c_(__detail::__uses_allocator_helper(std::move(other.c_), alloc))
+    c_(__detail::__uses_allocator_helper<container_type, Alloc>(alloc, std::move(other.c_)))
   { } 
 
-  /*
+  
   MDSPAN_TEMPLATE_REQUIRES(
     class... IndexType,
-    class = enable_if_t<__detail::__has_allocator<container_policy_type>::value, bool>,
-    class Alloc = __detail::__policy_allocator_t<container_policy_type>,
-    // requires // (
-      _MDSPAN_FOLD_AND(_MDSPAN_TRAIT(is_convertible, IndexType, index_type) // && ... //) &&
+    class Alloc = __detail::__policy_allocator_t<__detail::__make_dependent_t<container_policy_type, IndexType...>>,
+    /* requires */ (
+      _MDSPAN_FOLD_AND(_MDSPAN_TRAIT(is_convertible, IndexType, index_type) /* && ... */) &&
       (sizeof...(IndexType) == extents_type::rank_dynamic()) &&
       _MDSPAN_TRAIT(is_constructible, mapping_type, extents_type) &&
       _MDSPAN_TRAIT(is_default_constructible, container_policy_type)
@@ -346,31 +352,106 @@ public:
   )
   MDSPAN_INLINE_FUNCTION
   constexpr explicit
-  basic_mdarray(IndexType... dynamic_extents, const Alloc& alloc = {})
+  basic_mdarray(allocator_arg_t, const __detail::__nondeduced_t<Alloc>& alloc, IndexType... dynamic_extents)
     : cp_(),
       map_(extents_type(dynamic_extents...)),
       c_(cp_.create(map_.required_span_size(), alloc))
   { }
-  */
-  /*
-  MDSPAN_TEMPLATE_REQUIRES(
-    class... IndexType,
-    // requires  (
-      _MDSPAN_FOLD_AND(_MDSPAN_TRAIT(is_convertible, IndexType, index_type) // && ... ) &&
-      (sizeof...(IndexType) == extents_type::rank_dynamic()) &&
-      _MDSPAN_TRAIT(is_constructible, mapping_type, extents_type) &&
-      _MDSPAN_TRAIT(is_default_constructible, container_policy_type)
-      // TODO constraint on create without allocator being available, if we don't change to CP owning the allocator
-    )
-  )
-  MDSPAN_INLINE_FUNCTION
-  constexpr explicit
-  basic_mdarray(IndexType... dynamic_extents)
+  
+ // TODO noexcept specification
+  template<
+    class Dummy = void,
+    class = typename enable_if<is_default_constructible<__detail::__make_dependent_t<container_policy_type, Dummy>>::value, bool>::type,
+    class Alloc = __detail::__policy_allocator_t<__detail::__make_dependent_t<container_policy_type, Dummy>>
+  >
+  MDSPAN_INLINE_FUNCTION constexpr explicit
+  basic_mdarray(const mapping_type& m, const __detail::__nondeduced_t<Alloc>& alloc) noexcept
     : cp_(),
-      map_(extents_type(dynamic_extents...)),
+      map_(m),
       c_(cp_.create(map_.required_span_size()))
   { }
-  */
+
+  template<
+    class Dummy = void,
+    class = typename enable_if<is_default_constructible<__detail::__make_dependent_t<container_policy_type, Dummy>>::value, bool>::type,
+    class Alloc = __detail::__policy_allocator_t<__detail::__make_dependent_t<container_policy_type, Dummy>>
+  >
+  MDSPAN_INLINE_FUNCTION constexpr explicit
+  basic_mdarray(mapping_type&& m, const __detail::__nondeduced_t<Alloc>& alloc) noexcept
+    : cp_(),
+      map_(std::move(m)),
+      c_(cp_.create(map_.required_span_size(), alloc))
+  { }
+
+  template<
+    class Dummy = void,
+    class Alloc = __detail::__policy_allocator_t<__detail::__make_dependent_t<container_policy_type, Dummy>>
+  >
+  MDSPAN_INLINE_FUNCTION constexpr
+  basic_mdarray(mapping_type const& m, container_policy_type const& cp, const __detail::__nondeduced_t<Alloc>& alloc)
+    : cp_(cp),
+      map_(m),
+      c_(cp_.create(map_.required_span_size(), alloc))
+  { }
+
+  private:
+
+  template<class OtherElementType, class OtherExtents, class OtherLayoutPolicy, class OtherCP>
+  struct can_deduce_copy{
+    static constexpr bool value =  is_convertible<typename OtherLayoutPolicy::template mapping<OtherExtents>, mapping_type>::value
+                                && is_constructible<container_policy_type, OtherCP const&>::value
+                                && is_constructible<container_type, typename OtherCP::container_type const&>::value
+                                && is_convertible<OtherExtents, extents_type>::value;
+  };
+
+  public:
+
+  // TODO noexcept specification
+  template<
+    class OtherElementType,
+    class OtherExtents,
+    class OtherLayoutPolicy,
+    class OtherCP,
+    enable_if<can_deduce_copy<OtherElementType, OtherExtents, OtherLayoutPolicy, OtherCP>::value, bool> = true,
+    class Alloc = __detail::__policy_allocator_t<__detail::__make_dependent_t<container_policy_type, OtherCP>>
+  >
+  constexpr basic_mdarray(
+    basic_mdarray<OtherElementType, OtherExtents, OtherLayoutPolicy, OtherCP> const& other, const __detail::__nondeduced_t<Alloc>& alloc
+  ) noexcept
+    : cp_(other.cp_),
+      map_(other.map_),
+      c_(__detail::__uses_allocator_helper<container_type, Alloc>(alloc, other.c_))
+  { }
+
+  private:
+
+  template<class OtherElementType, class OtherExtents, class OtherLayoutPolicy, class OtherCP>
+  struct can_deduce_move{
+    static constexpr bool value =  is_convertible<typename OtherLayoutPolicy::template mapping<OtherExtents>, mapping_type>::value
+                                && is_constructible<container_policy_type, OtherCP&&>::value
+                                && is_constructible<container_type, typename OtherCP::container_type&&>::value
+                                && is_convertible<OtherExtents, extents_type>::value;
+  };
+
+  public:
+
+  // TODO noexcept specification
+  template<
+    class OtherElementType,
+    class OtherExtents,
+    class OtherLayoutPolicy,
+    class OtherCP,
+    enable_if<can_deduce_move<OtherElementType, OtherExtents, OtherLayoutPolicy, OtherCP>::value, bool> = true,
+    class Alloc = __detail::__policy_allocator_t<__detail::__make_dependent_t<container_policy_type, OtherCP>>
+  >
+  constexpr basic_mdarray(
+    basic_mdarray<OtherElementType, OtherExtents, OtherLayoutPolicy, OtherCP>&& other, const __detail::__nondeduced_t<Alloc>& alloc
+  ) noexcept
+    : cp_(std::move(other.cp_)),
+      map_(std::move(other.map_)),
+      c_(__detail::__uses_allocator_helper<container_type, Alloc>(alloc, std::move(other.c_)))
+  { }
+  
 
   //==========================================================================
 
