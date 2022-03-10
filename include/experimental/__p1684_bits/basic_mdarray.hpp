@@ -51,6 +51,7 @@
 #include <experimental/__p0009_bits/layout_right.hpp>
 #include <experimental/__p0009_bits/extents.hpp>
 #include <experimental/__p0009_bits/mdspan.hpp>
+#include <memory>
 
 namespace std {
 namespace experimental {
@@ -631,8 +632,19 @@ private:
 template <class T, size_t... Exts>
 using mdarray = basic_mdarray<T, std::experimental::extents<Exts...>>;
 
+//class basic_mdarray<
+//  ElementType, std::experimental::extents<Exts...>,
+//  LayoutPolicy, ContainerPolicy
+//>
+
+
 } // end namespace __mdarray_version_0
 } // end namespace experimental
+
+template<class ElementType, class Extents, class LayoutPolicy, class ContainerPolicy, class Allocator>
+struct uses_allocator<experimental::basic_mdarray<ElementType, Extents, LayoutPolicy, ContainerPolicy>, Allocator>
+  : uses_allocator<typename ContainerPolicy::container_type, Allocator> {};
+
 } // end namespace std
 
 #endif //MDARRAY_INCLUDE_EXPERIMENTAL_BITS_BASIC_MDARRAY_HPP_
