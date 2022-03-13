@@ -86,8 +86,8 @@ struct _basic_mdarray_crtp_helper<
 };
 
 template <class ContainerPolicy, class = void>
-struct __has_allocator{
-  static constexpr bool value = false;
+struct __has_allocator : false_type{
+  //static constexpr bool value = false;
 };
 
 template <class ContainerPolicy>
@@ -95,9 +95,9 @@ using __policy_allocator_t = typename ContainerPolicy::container_type::allocator
 
 // TODO: Make this C++11/14 friendly
 template <class ContainerPolicy>
-struct __has_allocator<ContainerPolicy, void_t<__policy_allocator_t<ContainerPolicy>>>{
-  using type = __policy_allocator_t<ContainerPolicy>;
-  static constexpr bool value = true;
+struct __has_allocator<ContainerPolicy, void_t<__policy_allocator_t<ContainerPolicy>>> : true_type{
+  //using type = __policy_allocator_t<ContainerPolicy>;
+  //static constexpr bool value = true;
 };
 
 template<class ContainerPolicy>
@@ -244,13 +244,34 @@ struct __is_resolvable<__type_list<MDArray, ConstructorArgs...>, void_t<__attemp
 };
 
 template<typename... Types>
-struct __is_resolvable_imp;
+struct __is_resolvable_imp_alloc;
 
 template<typename MDArray, typename Last, typename...ConstructorArgs>
-struct __is_resolvable_imp<MDArray, Last, __type_list<ConstructorArgs...>>{
+struct __is_resolvable_imp_alloc<MDArray, Last, __type_list<ConstructorArgs...>>{
   static constexpr bool value = __can_make_mapping<MDArray, ConstructorArgs..., Last>::value 
                                 || (__can_make_mapping<MDArray, ConstructorArgs...>::value 
                                   && (__is_mdarray_alloc_t<MDArray, Last>{} || is_convertible<Last, __policy_allocator_t<typename MDArray::container_policy_type>>::value));
+};
+
+template<typename... Types>
+struct __is_resolvable_imp_noalloc;
+
+template<typename MDArray, typename Last, typename...ConstructorArgs>
+struct __is_resolvable_imp_noalloc<MDArray, Last, __type_list<ConstructorArgs...>>{
+  static constexpr bool value = __can_make_mapping<MDArray, ConstructorArgs..., Last>::value;
+};
+
+template<typename TypeList, typename HasAlloc>
+struct __is_resolvable_imp;
+
+template<typename MDArray, typename Last, typename...ConstructorArgs>
+struct __is_resolvable_imp<__type_list<MDArray, Last, __type_list<ConstructorArgs...>>, true_type>{
+  static constexpr bool value = __is_resolvable_imp_alloc<MDArray, Last, __type_list<ConstructorArgs...>>::value;
+};
+
+template<typename MDArray, typename Last, typename...ConstructorArgs>
+struct __is_resolvable_imp<__type_list<MDArray, Last, __type_list<ConstructorArgs...>>, false_type>{
+  static constexpr bool value = __is_resolvable_imp_noalloc<MDArray, Last, __type_list<ConstructorArgs...>>::value;
 };
 
 template<typename TypeList, class = void>
@@ -262,7 +283,7 @@ struct __is_resolvable_get_last{
 template<typename MDArray, typename...ConstructorArgs>
 struct __is_resolvable_get_last<__type_list<MDArray, ConstructorArgs...>, typename enable_if<(sizeof...(ConstructorArgs)>0), void>::type>{
   using all_but_last = __type_pop_back_t<ConstructorArgs...>;
-  static constexpr bool value = __is_resolvable_imp<MDArray, __get_last_t<ConstructorArgs...>, all_but_last>::value;
+  static constexpr bool value = __is_resolvable_imp<__type_list<MDArray, __get_last_t<ConstructorArgs...>, all_but_last>, std::integral_constant<bool, __has_allocator<typename MDArray::container_policy_type>::value>>::value;
 };
 
 template<typename MDArray, typename...ConstructorArgs>
