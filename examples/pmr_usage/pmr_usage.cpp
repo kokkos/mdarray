@@ -51,14 +51,13 @@ struct ChatterResource : std::pmr::memory_resource{
 
 
 int main(){
-
+    
     using array_2d_pmr_dynamic = stdex::basic_mdarray<int, stdex::extents<stdex::dynamic_extent, stdex::dynamic_extent>, stdex::layout_right, stdex::vector_container_policy<int, std::pmr::polymorphic_allocator<int>>>;
 
     ChatterResource allocation_logger;
     constexpr bool test = std::uses_allocator_v<array_2d_pmr_dynamic, std::pmr::polymorphic_allocator<int>>;
-    std::cout << sizeof(array_2d_pmr_dynamic) << std::endl;
 
-    array_2d_pmr_dynamic mdarray{std::allocator_arg, &allocation_logger, 3,3};
+    array_2d_pmr_dynamic mdarray{3,3, &allocation_logger};
 
     std::pmr::vector<array_2d_pmr_dynamic> top_container{&allocation_logger};
     top_container.reserve(4);
@@ -67,7 +66,7 @@ int main(){
     top_container.emplace_back(mdarray.mapping());
     top_container.emplace_back(mdarray.mapping(), mdarray.container_policy());
     top_container.push_back({mdarray});
-
+    
 }
 
 

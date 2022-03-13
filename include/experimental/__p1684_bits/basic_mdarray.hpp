@@ -106,14 +106,14 @@ constexpr bool __has_allocator_v = __has_allocator<ContainerPolicy>::value;
 template<class Container,
          class Alloc,
          class... Args>
-auto __uses_allocator_helper(const Alloc& alloc, Args&&... args) noexcept(noexcept(Container{allocator_arg, alloc, std::forward<Args>(args)...}))->decltype(Container{allocator_arg, alloc, std::forward<Args>(args)...}){
+decltype(Container{allocator_arg, declval<const Alloc&>(), declval<Args>()...}) __uses_allocator_helper(const Alloc& alloc, Args&&... args) noexcept(noexcept(Container{allocator_arg, alloc, std::forward<Args>(args)...})){
   return Container{allocator_arg, alloc, std::forward<Args>(args)...};
 }
 
 template<class Container,
          class Alloc,
          class... Args>
-auto __uses_allocator_helper(const Alloc& alloc, Args&&... args) noexcept(noexcept(Container{std::forward<Args>(args)..., alloc}))->decltype(Container{std::forward<Args>(args)..., alloc}){
+decltype(Container{declval<Args>()..., declval<const Alloc&>()}) __uses_allocator_helper(const Alloc& alloc, Args&&... args) noexcept(noexcept(Container{std::forward<Args>(args)..., alloc})){
   return Container{std::forward<Args>(args)..., alloc};
 }
 
@@ -134,6 +134,142 @@ struct __make_dependent{
 
 template<class Independent, class... Types>
 using __make_dependent_t = typename __make_dependent<Independent, Types...>::type;
+
+template<typename... Types>
+struct __type_list{};
+
+template<bool recurse, typename... Types>
+struct __type_pop_back_imp;
+
+
+template<typename... TypesInList, typename NextType, typename... RemainingTypes>
+struct __type_pop_back_imp<true, __type_list<TypesInList...>, NextType, RemainingTypes...>{
+  static_assert(sizeof...(RemainingTypes)!=0);
+  using type = typename __type_pop_back_imp<
+                 sizeof...(RemainingTypes)!=1,
+                 __type_list<TypesInList..., NextType>, 
+                 RemainingTypes...
+               >::type;
+};
+
+template<typename... TypesInList, typename LastType>
+struct __type_pop_back_imp<false, __type_list<TypesInList...>, LastType>{
+  using type = __type_pop_back_imp;
+  using list = __type_list<TypesInList...>;
+  using last = LastType;
+};
+
+template<typename... Types>
+struct __type_pop_back{
+  using type = typename __type_pop_back_imp<(sizeof...(Types)>1),__type_list<>, Types...>::type::list;
+};
+
+template<typename... Types>
+using __type_pop_back_t = typename __type_pop_back< Types...>::type;
+
+template<typename... Types>
+struct __get_last{
+  using type = typename __type_pop_back_imp<(sizeof...(Types)>1),__type_list<>, Types...>::type::last;
+};
+
+template<typename... Types>
+using __get_last_t = typename __get_last< Types...>::type;
+
+using test = __type_pop_back_t<int, float, bool>;
+using other_test = __get_last_t<int, float, bool>;
+
+template<typename MDArray, typename... IndexTypes>
+struct __can_make_mapping {
+  static constexpr bool value = _MDSPAN_FOLD_AND((is_convertible<IndexTypes, typename MDArray::index_type>::value)) &&
+                                (sizeof...(IndexTypes) == MDArray::extents_type::rank_dynamic()) &&
+                                is_constructible<typename MDArray::mapping_type, typename MDArray::extents_type>::value;
+};
+
+
+template<typename MDArray, typename Type>
+using __is_mdarray_alloc_t = is_same<typename remove_cv<typename remove_reference<Type>::type>::type, __policy_allocator_t<MDArray>>;
+
+template<typename Type>
+using __to_const_ref_t = const typename remove_cv<typename remove_reference<Type>::type>::type&;
+
+template<typename Mapping, typename Alloc>
+struct __map_and_alloc{
+  Mapping first;
+  const Alloc& second;
+};
+
+template<typename MDArray,
+         typename... Types,
+         typename Last,
+         typename enable_if<__can_make_mapping<MDArray, Types...>::value, bool>::type = true,
+         typename enable_if<(__is_mdarray_alloc_t<MDArray, Last>{} 
+                               || is_convertible<Last, __policy_allocator_t<typename MDArray::container_policy_type>>::value),
+                             bool>::type = true
+>
+pair<typename MDArray::mapping_type, __to_const_ref_t<Last>> __resolve_pack_overload_imp(Types&&... args, Last&& last){
+  return pair<typename MDArray::mapping_type, __to_const_ref_t<Last>>{ typename MDArray::extents_type{forward<Types>(args)...}, last};
+}
+
+template<typename MDArray,
+         typename... Types,
+         typename Last,
+         typename enable_if<__can_make_mapping<MDArray, Types..., Last>::value, bool>::type = true
+>
+typename MDArray::mapping_type __resolve_pack_overload_imp(Types&&... args, Last&& last){
+  return typename MDArray::mapping_type{ typename MDArray::extents_type{forward<Types>(args)..., forward<Last>(last)}};
+}
+
+template<typename MDArray, typename... TrimmedPack, typename... ActualPack>
+auto __resolve_pack_split_first(__type_list<TrimmedPack...>, ActualPack&&... args){
+  return __resolve_pack_overload_imp<MDArray, TrimmedPack...>(forward<ActualPack>(args)...);
+}
+
+template<typename MDArray, typename... Types>
+auto __resolve_pack_overload(Types&&... args){
+  return __resolve_pack_split_first<MDArray>(__type_pop_back_t<Types...>{}, forward<Types>(args)...);
+}
+
+template <typename ConstructorArgList, class = void>
+struct __is_resolvable{
+  static constexpr bool value = false;
+};
+
+
+template<typename MDArray, typename... ConstructorArgs>
+using __attempt_resolve_t = decltype(__resolve_pack_overload<MDArray>(declval<ConstructorArgs>()...));
+
+template <typename MDArray, typename... ConstructorArgs>
+struct __is_resolvable<__type_list<MDArray, ConstructorArgs...>, void_t<__attempt_resolve_t<MDArray, ConstructorArgs...>>>{
+  static constexpr bool value = true;
+};
+
+template<typename... Types>
+struct __is_resolvable_imp;
+
+template<typename MDArray, typename Last, typename...ConstructorArgs>
+struct __is_resolvable_imp<MDArray, Last, __type_list<ConstructorArgs...>>{
+  static constexpr bool value = __can_make_mapping<MDArray, ConstructorArgs..., Last>::value 
+                                || (__can_make_mapping<MDArray, ConstructorArgs...>::value 
+                                  && (__is_mdarray_alloc_t<MDArray, Last>{} || is_convertible<Last, __policy_allocator_t<typename MDArray::container_policy_type>>::value));
+};
+
+template<typename TypeList, class = void>
+struct __is_resolvable_get_last{
+  static constexpr bool value = false;
+};
+
+
+template<typename MDArray, typename...ConstructorArgs>
+struct __is_resolvable_get_last<__type_list<MDArray, ConstructorArgs...>, typename enable_if<(sizeof...(ConstructorArgs)>0), void>::type>{
+  using all_but_last = __type_pop_back_t<ConstructorArgs...>;
+  static constexpr bool value = __is_resolvable_imp<MDArray, __get_last_t<ConstructorArgs...>, all_but_last>::value;
+};
+
+template<typename MDArray, typename...ConstructorArgs>
+struct __is_resolvable_alt{
+  
+  static constexpr bool value = __is_resolvable_get_last<__type_list<MDArray, ConstructorArgs...>>::value;
+};
 
 } // end namespace __detail
 
@@ -202,10 +338,20 @@ public:
   ~basic_mdarray() noexcept(std::is_nothrow_destructible<container_type>::value) = default;
 
   // TODO noexcept clause
+  template<
+    class... IndexType,
+    class = typename enable_if<__detail::__is_resolvable_alt<basic_mdarray, IndexType...>::value, bool>::type
+  >
+  MDSPAN_INLINE_FUNCTION
+  constexpr explicit
+  basic_mdarray(IndexType... dynamic_extents)
+    : basic_mdarray(__detail::__resolve_pack_overload<basic_mdarray>(dynamic_extents...))
+  { }
+  /*
   MDSPAN_TEMPLATE_REQUIRES(
     class... IndexType,
-    /* requires */ (
-      _MDSPAN_FOLD_AND(_MDSPAN_TRAIT(is_convertible, IndexType, index_type) /* && ... */) &&
+    // requires // (
+      _MDSPAN_FOLD_AND(_MDSPAN_TRAIT(is_convertible, IndexType, index_type) // && ... //) &&
       (sizeof...(IndexType) == extents_type::rank_dynamic()) &&
       _MDSPAN_TRAIT(is_constructible, mapping_type, extents_type) &&
       _MDSPAN_TRAIT(is_default_constructible, container_policy_type)
@@ -219,6 +365,7 @@ public:
       map_(extents_type(dynamic_extents...)),
       c_(cp_.create(map_.required_span_size()))
   { }
+  */
 
   // TODO noexcept specification
   MDSPAN_FUNCTION_REQUIRES(
@@ -339,12 +486,12 @@ public:
     c_(__detail::__uses_allocator_helper<container_type, Alloc>(alloc, std::move(other.c_)))
   { } 
 
-  
+  /*
   MDSPAN_TEMPLATE_REQUIRES(
     class... IndexType,
     class Alloc = __detail::__policy_allocator_t<__detail::__make_dependent_t<container_policy_type, IndexType...>>,
-    /* requires */ (
-      _MDSPAN_FOLD_AND(_MDSPAN_TRAIT(is_convertible, IndexType, index_type) /* && ... */) &&
+    // requires // (
+      _MDSPAN_FOLD_AND(_MDSPAN_TRAIT(is_convertible, IndexType, index_type) // && ... //) &&
       (sizeof...(IndexType) == extents_type::rank_dynamic()) &&
       _MDSPAN_TRAIT(is_constructible, mapping_type, extents_type) &&
       _MDSPAN_TRAIT(is_default_constructible, container_policy_type)
@@ -358,7 +505,7 @@ public:
       map_(extents_type(dynamic_extents...)),
       c_(cp_.create(map_.required_span_size(), alloc))
   { }
-  
+  */
  // TODO noexcept specification
   template<
     class Dummy = void,
@@ -382,6 +529,22 @@ public:
     : cp_(),
       map_(std::move(m)),
       c_(cp_.create(map_.required_span_size(), alloc))
+  { }
+
+  template<
+    class Dummy = void,
+    class = typename enable_if<is_default_constructible<__detail::__make_dependent_t<container_policy_type, Dummy>>::value, bool>::type,
+    class Alloc,
+    class DependantContainerPolicy = __detail::__make_dependent_t<container_policy_type, Dummy>,
+    class = typename enable_if<is_same<__detail::__policy_allocator_t<DependantContainerPolicy>, Alloc>{} 
+                               || is_convertible<Alloc, __detail::__policy_allocator_t<DependantContainerPolicy>>::value,
+                               bool>::type
+  >
+  MDSPAN_INLINE_FUNCTION constexpr explicit
+  basic_mdarray(pair<mapping_type, const Alloc&> mapping_and_alloc) noexcept
+    : cp_(),
+      map_(std::move(mapping_and_alloc.first)),
+      c_(cp_.create(map_.required_span_size(), mapping_and_alloc.second))
   { }
 
   template<
