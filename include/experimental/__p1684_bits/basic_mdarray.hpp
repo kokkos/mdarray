@@ -85,20 +85,26 @@ struct _basic_mdarray_crtp_helper<
   }
 };
 
-template <class ContainerPolicy, class = void>
-struct __has_allocator : false_type{
-  //static constexpr bool value = false;
-};
-
 template <class ContainerPolicy>
 using __policy_allocator_t = typename ContainerPolicy::container_type::allocator_type;
 
-// TODO: Make this C++11/14 friendly
-template <class ContainerPolicy>
-struct __has_allocator<ContainerPolicy, void_t<__policy_allocator_t<ContainerPolicy>>> : true_type{
-  //using type = __policy_allocator_t<ContainerPolicy>;
-  //static constexpr bool value = true;
+template <class ContainerPolicy, class = void>
+struct __has_allocator : false_type {};
+
+// Me: Hey mom? Can we have C++17's std::void_t?
+// Mom: No honey, we have void_t at home.
+template<typename Type>
+struct __void_at_home{
+  using type = void;
 };
+
+// Indirection in case CWG issue 1558 resolution is not supported.
+template<typename Type>
+using __void_t_at_home = typename __void_at_home<Type>::type;
+
+// TODO: Make this C++14 friendly
+template <class ContainerPolicy>
+struct __has_allocator<ContainerPolicy, __void_t_at_home<__policy_allocator_t<ContainerPolicy>>> : true_type {};
 
 template<class ContainerPolicy>
 constexpr bool __has_allocator_v = __has_allocator<ContainerPolicy>::value;
@@ -106,15 +112,23 @@ constexpr bool __has_allocator_v = __has_allocator<ContainerPolicy>::value;
 template<class Container,
          class Alloc,
          class... Args>
-decltype(Container{allocator_arg, declval<const Alloc&>(), declval<Args>()...}) __uses_allocator_helper(const Alloc& alloc, Args&&... args) noexcept(noexcept(Container{allocator_arg, alloc, std::forward<Args>(args)...})){
-  return Container{allocator_arg, alloc, std::forward<Args>(args)...};
+auto __uses_allocator_helper(const Alloc& alloc, Args&&... args)
+  noexcept(noexcept(Container{allocator_arg, alloc, std::forward<Args>(args)...}))->
+  decltype(Container{allocator_arg, alloc, std::forward<Args>(args)...}){
+
+    return Container{allocator_arg, alloc, std::forward<Args>(args)...};
+
 }
 
 template<class Container,
          class Alloc,
          class... Args>
-decltype(Container{declval<Args>()..., declval<const Alloc&>()}) __uses_allocator_helper(const Alloc& alloc, Args&&... args) noexcept(noexcept(Container{std::forward<Args>(args)..., alloc})){
+auto __uses_allocator_helper(const Alloc& alloc, Args&&... args)
+  noexcept(noexcept(Container{std::forward<Args>(args)..., alloc}))->
+  decltype(Container{std::forward<Args>(args)..., alloc}){
+
   return Container{std::forward<Args>(args)..., alloc};
+
 }
 
 // can't use type_identity for this pre C++20
@@ -162,6 +176,12 @@ struct __type_pop_back_imp<false, __type_list<TypesInList...>, LastType>{
 template<typename... Types>
 struct __type_pop_back{
   using type = typename __type_pop_back_imp<(sizeof...(Types)>1),__type_list<>, Types...>::type::list;
+};
+
+// Avoid hard compile errors
+template<>
+struct __type_pop_back<>{
+  using type = __type_list<>;
 };
 
 template<typename... Types>
@@ -220,77 +240,18 @@ typename MDArray::mapping_type __resolve_pack_overload_imp(Types&&... args, Last
 }
 
 template<typename MDArray, typename... TrimmedPack, typename... ActualPack>
-auto __resolve_pack_split_first(__type_list<TrimmedPack...>, ActualPack&&... args){
+auto __resolve_pack_split_first(__type_list<TrimmedPack...>, ActualPack&&... args)->decltype(__resolve_pack_overload_imp<MDArray, TrimmedPack...>(forward<ActualPack>(args)...)){
   return __resolve_pack_overload_imp<MDArray, TrimmedPack...>(forward<ActualPack>(args)...);
 }
 
 template<typename MDArray, typename... Types>
-auto __resolve_pack_overload(Types&&... args){
+auto __resolve_pack_overload(Types&&... args)->decltype(__resolve_pack_split_first<MDArray>(__type_pop_back_t<Types...>{}, forward<Types>(args)...)){
   return __resolve_pack_split_first<MDArray>(__type_pop_back_t<Types...>{}, forward<Types>(args)...);
 }
-
-template <typename ConstructorArgList, class = void>
-struct __is_resolvable{
-  static constexpr bool value = false;
-};
 
 
 template<typename MDArray, typename... ConstructorArgs>
 using __attempt_resolve_t = decltype(__resolve_pack_overload<MDArray>(declval<ConstructorArgs>()...));
-
-template <typename MDArray, typename... ConstructorArgs>
-struct __is_resolvable<__type_list<MDArray, ConstructorArgs...>, void_t<__attempt_resolve_t<MDArray, ConstructorArgs...>>>{
-  static constexpr bool value = true;
-};
-
-template<typename... Types>
-struct __is_resolvable_imp_alloc;
-
-template<typename MDArray, typename Last, typename...ConstructorArgs>
-struct __is_resolvable_imp_alloc<MDArray, Last, __type_list<ConstructorArgs...>>{
-  static constexpr bool value = __can_make_mapping<MDArray, ConstructorArgs..., Last>::value 
-                                || (__can_make_mapping<MDArray, ConstructorArgs...>::value 
-                                  && (__is_mdarray_alloc_t<MDArray, Last>{} || is_convertible<Last, __policy_allocator_t<typename MDArray::container_policy_type>>::value));
-};
-
-template<typename... Types>
-struct __is_resolvable_imp_noalloc;
-
-template<typename MDArray, typename Last, typename...ConstructorArgs>
-struct __is_resolvable_imp_noalloc<MDArray, Last, __type_list<ConstructorArgs...>>{
-  static constexpr bool value = __can_make_mapping<MDArray, ConstructorArgs..., Last>::value;
-};
-
-template<typename TypeList, typename HasAlloc>
-struct __is_resolvable_imp;
-
-template<typename MDArray, typename Last, typename...ConstructorArgs>
-struct __is_resolvable_imp<__type_list<MDArray, Last, __type_list<ConstructorArgs...>>, true_type>{
-  static constexpr bool value = __is_resolvable_imp_alloc<MDArray, Last, __type_list<ConstructorArgs...>>::value;
-};
-
-template<typename MDArray, typename Last, typename...ConstructorArgs>
-struct __is_resolvable_imp<__type_list<MDArray, Last, __type_list<ConstructorArgs...>>, false_type>{
-  static constexpr bool value = __is_resolvable_imp_noalloc<MDArray, Last, __type_list<ConstructorArgs...>>::value;
-};
-
-template<typename TypeList, class = void>
-struct __is_resolvable_get_last{
-  static constexpr bool value = false;
-};
-
-
-template<typename MDArray, typename...ConstructorArgs>
-struct __is_resolvable_get_last<__type_list<MDArray, ConstructorArgs...>, typename enable_if<(sizeof...(ConstructorArgs)>0), void>::type>{
-  using all_but_last = __type_pop_back_t<ConstructorArgs...>;
-  static constexpr bool value = __is_resolvable_imp<__type_list<MDArray, __get_last_t<ConstructorArgs...>, all_but_last>, std::integral_constant<bool, __has_allocator<typename MDArray::container_policy_type>::value>>::value;
-};
-
-template<typename MDArray, typename...ConstructorArgs>
-struct __is_resolvable_alt{
-  
-  static constexpr bool value = __is_resolvable_get_last<__type_list<MDArray, ConstructorArgs...>>::value;
-};
 
 } // end namespace __detail
 
@@ -361,32 +322,16 @@ public:
   // TODO noexcept clause
   template<
     class... IndexType,
-    class = typename enable_if<__detail::__is_resolvable_alt<basic_mdarray, IndexType...>::value, bool>::type
+    class = enable_if_t<sizeof...(IndexType) != 0 && is_default_constructible<container_policy_type>::value, bool>, //
+    class = __detail::__attempt_resolve_t<basic_mdarray, IndexType...>
+    // TODO constraint on create without allocator being available, if we don't change to CP owning the allocator
   >
   MDSPAN_INLINE_FUNCTION
   constexpr explicit
   basic_mdarray(IndexType... dynamic_extents)
     : basic_mdarray(__detail::__resolve_pack_overload<basic_mdarray>(dynamic_extents...))
+      // This resolves to either basic_mdarray(mapping_type&&) or the private basic_mdarray(pair<mapping_type, const convertable_to_alloc&>)
   { }
-  /*
-  MDSPAN_TEMPLATE_REQUIRES(
-    class... IndexType,
-    // requires // (
-      _MDSPAN_FOLD_AND(_MDSPAN_TRAIT(is_convertible, IndexType, index_type) // && ... //) &&
-      (sizeof...(IndexType) == extents_type::rank_dynamic()) &&
-      _MDSPAN_TRAIT(is_constructible, mapping_type, extents_type) &&
-      _MDSPAN_TRAIT(is_default_constructible, container_policy_type)
-      // TODO constraint on create without allocator being available, if we don't change to CP owning the allocator
-    )
-  )
-  MDSPAN_INLINE_FUNCTION
-  constexpr explicit
-  basic_mdarray(IndexType... dynamic_extents)
-    : cp_(),
-      map_(extents_type(dynamic_extents...)),
-      c_(cp_.create(map_.required_span_size()))
-  { }
-  */
 
   // TODO noexcept specification
   MDSPAN_FUNCTION_REQUIRES(
@@ -507,26 +452,6 @@ public:
     c_(__detail::__uses_allocator_helper<container_type, Alloc>(alloc, std::move(other.c_)))
   { } 
 
-  /*
-  MDSPAN_TEMPLATE_REQUIRES(
-    class... IndexType,
-    class Alloc = __detail::__policy_allocator_t<__detail::__make_dependent_t<container_policy_type, IndexType...>>,
-    // requires // (
-      _MDSPAN_FOLD_AND(_MDSPAN_TRAIT(is_convertible, IndexType, index_type) // && ... //) &&
-      (sizeof...(IndexType) == extents_type::rank_dynamic()) &&
-      _MDSPAN_TRAIT(is_constructible, mapping_type, extents_type) &&
-      _MDSPAN_TRAIT(is_default_constructible, container_policy_type)
-      // TODO constraint on create without allocator being available, if we don't change to CP owning the allocator
-    )
-  )
-  MDSPAN_INLINE_FUNCTION
-  constexpr explicit
-  basic_mdarray(allocator_arg_t, const __detail::__nondeduced_t<Alloc>& alloc, IndexType... dynamic_extents)
-    : cp_(),
-      map_(extents_type(dynamic_extents...)),
-      c_(cp_.create(map_.required_span_size(), alloc))
-  { }
-  */
  // TODO noexcept specification
   template<
     class Dummy = void,
@@ -552,6 +477,7 @@ public:
       c_(cp_.create(map_.required_span_size(), alloc))
   { }
 
+  private:
   template<
     class Dummy = void,
     class = typename enable_if<is_default_constructible<__detail::__make_dependent_t<container_policy_type, Dummy>>::value, bool>::type,
@@ -568,6 +494,7 @@ public:
       c_(cp_.create(map_.required_span_size(), mapping_and_alloc.second))
   { }
 
+  public:
   template<
     class Dummy = void,
     class Alloc = __detail::__policy_allocator_t<__detail::__make_dependent_t<container_policy_type, Dummy>>

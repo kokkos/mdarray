@@ -58,6 +58,7 @@ int main(){
     constexpr bool test = std::uses_allocator_v<array_2d_pmr_dynamic, std::pmr::polymorphic_allocator<int>>;
 
     array_2d_pmr_dynamic mdarray{3,3, &allocation_logger};
+    array_2d_pmr_dynamic anotherMdarray{3,3};
 
     std::pmr::vector<array_2d_pmr_dynamic> top_container{&allocation_logger};
     top_container.reserve(4);
