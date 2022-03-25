@@ -5,3 +5,4 @@ function(mdarray_add_example EXENAME)
 endfunction(mdarray_add_example)
 
 add_subdirectory(dot_product)
+add_subdirectory(pmr_usage)

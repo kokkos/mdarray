@@ -1,0 +1,1 @@
+mdarray_add_example(pmr_usage)

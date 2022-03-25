@@ -156,11 +156,11 @@ public:
   // TODO noexcept clause
   MDSPAN_FUNCTION_REQUIRES(
     (MDSPAN_INLINE_FUNCTION static constexpr typename __base_t_::container_type),
-    create, (size_t n, Allocator& alloc), noexcept,
+    create, (size_t n, const Allocator& alloc), noexcept,
     /* requires */ (
       _MDSPAN_TRAIT(
         is_constructible,
-        typename __base_t_::container_type, size_t, typename __base_t_::element_type, Allocator&
+        typename __base_t_::container_type, size_t, typename __base_t_::element_type, const Allocator&
       )
     )
   )
